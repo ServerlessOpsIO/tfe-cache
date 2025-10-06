@@ -1,0 +1,17 @@
+{
+    "Domain": "Development",
+    "System": "Versant",
+    "Component": $env.GITHUB_REPOSITORY_NAME_PART_SLUG_CS,
+    "CodeBranch": $env.GITHUB_REF_SLUG_CS,
+    "VpcId": "/org/networking/VpcId",
+    "VpcSubnets": "/org/networking/VpcPrivateSubnets",
+    "DbEngine": "",
+    "DbEngineVersion": "",
+    "DbFamily": "",
+    "DbPort": "",
+    "DbUsername": "",
+    "RdsScalingMinCapacity": "",
+    "RdsScalingMaxCapacity": "",
+    "RdsScalingMinInstances": "",
+    "RdsScalingMaxInstances": ""
+}
