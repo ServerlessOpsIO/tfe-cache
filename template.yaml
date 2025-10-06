@@ -23,4 +23,176 @@ Parameters:
     Type: String
     Description: "Name of GitHub Branch"
 
-Resources: {}
+  VpcId:
+    Type: AWS::SSM::Parameter::Value<String>
+    Description: Account VPC ID
+
+  VpcSubnets:
+    Type: AWS::SSM::Parameter::Value<CommaDelimitedList>
+    Description: Account subnets
+
+  Engine:
+    Type: String
+    Description: Database engine
+    AllowedValues:
+      - redis
+      - valkey
+
+  NodeType:
+    Type: String
+    Description: ElastiCache node type
+    # NOTE: Just suggestions. Tune to own needs
+    AllowedPattern: "^cache\\.(t3|t4g|m5|m6|r5|r6g|r6gd)\\.(micro|small|medium|large|xlarge)$"
+
+  NumCacheClusters:
+    Type: Number
+    Description: Number of cache clusters (replicas)
+    MinValue: 2  # Redis with AutomaticFailoverEnabled requires at least 2 nodes
+    MaxValue: 6
+
+  EngineVersion:
+    Type: String
+    Description: Engine version
+
+  Port:
+    Type: Number
+    Description: Port number
+    Default: 6379
+
+  EncryptionInTransit:
+    Type: String
+    Description: Enable encryption in transit
+    AllowedValues:
+      - "true"
+      - "false"
+    Default: "true"
+
+  EncryptionAtRest:
+    Type: String
+    Description: Enable encryption at rest
+    AllowedValues:
+      - "true"
+      - "false"
+    Default: "true"
+
+Resources:
+  # Log group
+  EngineCloudwatchLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub '/${AWS::StackName}/engine-log'
+      RetentionInDays: 5
+
+  SlowCloudwatchLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub '/${AWS::StackName}/slow-log'
+      RetentionInDays: 5
+
+  # Redis Security Group
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub 'Security group for ${Component} cache cluster'
+      VpcId: !Ref VpcId
+
+  # ElastiCache Subnet Group
+  SubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      Description: !Sub 'Subnet group for ${Component} cache cluster'
+      SubnetIds: !Ref VpcSubnets
+
+  # ElastiCache Replication Group
+  ReplicationGroup:
+    Type: AWS::ElastiCache::ReplicationGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      ReplicationGroupDescription: !Sub 'Cache replication group for ${Component}'
+      Engine: !Ref Engine
+      EngineVersion: !Ref EngineVersion
+      Port: !Ref Port
+      CacheNodeType: !Ref NodeType
+      NumCacheClusters: !Ref NumCacheClusters
+      AutomaticFailoverEnabled: true
+      MultiAZEnabled: true
+      CacheSubnetGroupName: !Ref SubnetGroup
+      SecurityGroupIds:
+        - !Ref SecurityGroup
+      AtRestEncryptionEnabled: !Ref EncryptionAtRest
+      TransitEncryptionEnabled: !Ref EncryptionInTransit
+      LogDeliveryConfigurations:
+        - LogType: engine-log
+          DestinationType: cloudwatch-logs
+          LogFormat: json
+          DestinationDetails:
+            CloudWatchLogsDetails:
+              LogGroup: !Ref EngineCloudwatchLogGroup
+        - LogType: slow-log
+          DestinationType: cloudwatch-logs
+          LogFormat: json
+          DestinationDetails:
+            CloudWatchLogsDetails:
+              LogGroup: !Ref SlowCloudwatchLogGroup
+      SnapshotRetentionLimit: 0   # NOTE: No need for snapshots
+      PreferredMaintenanceWindow: 'sun:05:00-sun:07:00'
+      AutoMinorVersionUpgrade: true
+
+  # SSM Parameters for service consumption
+  PrimaryEndpointSsmParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Type: String
+      Description: Cache primary endpoint address
+      Name: !Sub '/${Domain}/${System}/${Component}/${CodeBranch}/CachePrimaryEndpoint'
+      Value: !GetAtt ReplicationGroup.PrimaryEndPoint.Address
+
+  ReaderEndpointSsmParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Type: String
+      Description: Cache reader endpoint address
+      Name: !Sub '/${Domain}/${System}/${Component}/${CodeBranch}/CacheReaderEndpoint'
+      Value: !GetAtt ReplicationGroup.ReaderEndPoint.Address
+
+  PortSsmParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Type: String
+      Description: Cache port
+      Name: !Sub '/${Domain}/${System}/${Component}/${CodeBranch}/CachePort'
+      Value: !Ref Port
+
+  SecurityGroupIdSsmParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Type: String
+      Description: Cache security group ID
+      Name: !Sub '/${Domain}/${System}/${Component}/${CodeBranch}/CacheSecurityGroupId'
+      Value: !Ref SecurityGroup
+
+Outputs:
+  ReplicationGroupId:
+    Description: ID of the ElastiCache Replication Group
+    Value: !Ref ReplicationGroup
+
+  PrimaryEndpointAddress:
+    Description: Primary endpoint address
+    Value: !GetAtt ReplicationGroup.PrimaryEndPoint.Address
+
+  ReaderEndpointAddress:
+    Description: Reader endpoint address
+    Value: !GetAtt ReplicationGroup.ReaderEndPoint.Address
+
+  Port:
+    Description: Port
+    Value: !Ref Port
+
+  SecurityGroupId:
+    Description: Security group ID for the cluster
+    Value: !Ref SecurityGroup

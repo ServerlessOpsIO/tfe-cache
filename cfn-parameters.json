@@ -5,13 +5,8 @@
     "CodeBranch": $env.GITHUB_REF_SLUG_CS,
     "VpcId": "/org/networking/VpcId",
     "VpcSubnets": "/org/networking/VpcPrivateSubnets",
-    "DbEngine": "",
-    "DbEngineVersion": "",
-    "DbFamily": "",
-    "DbPort": "",
-    "DbUsername": "",
-    "RdsScalingMinCapacity": "",
-    "RdsScalingMaxCapacity": "",
-    "RdsScalingMinInstances": "",
-    "RdsScalingMaxInstances": ""
+    "Engine": "redis",
+    "NodeType": "cache.t4g.micro",
+    "NumCacheClusters": 3,
+    "EngineVersion": "7.1"
 }
